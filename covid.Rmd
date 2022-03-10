@@ -1,0 +1,118 @@
+---
+title: A toy model of UK COVID-19 incidence
+---
+    
+```{r}
+library(tidyverse)
+```
+
+```{r}
+source("geom-gappath.r")
+```
+
+Here are the number of UK cases and deaths. These data come from [NHS England's
+dashboard](https://www.gov.uk/government/publications/covid-19-track-coronavirus-cases)
+and are cumulative. The date is the date on which the figure was reported. Up
+until March 25, figures were intended to be reported at 2pm on the date given
+and included deaths in the 24 hours ending at 9am on that day. On March 25, the
+reported figures were for deaths from 9am March 24 to 5pm the same day (a period
+of 8 hours). On March 26 the reported figures were from 5pm on March 24 to 5pm
+on March 25. 
+
+On Sunday 29 March British Summer Time began. Prior to this date, times were in
+UTC.
+
+The deaths are those recorded in hospitals.
+
+```{r}
+uk <- read_csv("
+date,time,deaths
+2020-03-10,2020-03-10T0900Z, 6
+2020-03-12,2020-03-12T0900Z, 8
+2020-03-14,2020-03-14T0900Z, 21
+2020-03-15,2020-03-15T0900Z, 35
+2020-03-16,2020-03-16T0900Z, 55
+2020-03-17,2020-03-17T0900Z, 71
+2020-03-18,2020-03-18T0900Z, 103
+2020-03-19,2020-03-19T0900Z, 144
+2020-03-20,2020-03-20T0900Z, 177
+2020-03-21,2020-03-21T0900Z, 233
+2020-03-22,2020-03-22T0900Z, 281
+2020-03-23,2020-03-23T0900Z, 335
+2020-03-24,2020-03-24T0900Z, 422
+2020-03-25,2020-03-24T1700Z, 463
+2020-03-26,2020-03-25T1700Z, 578  
+2020-03-27,2020-03-26T1700Z, 759
+2020-03-28,2020-03-27T1700Z, 1019
+2020-03-29,2020-03-28T1700Z, 1228
+2020-03-30,2020-03-29T1700+0100, 1408
+2020-03-31,2020-03-30T1700+0100, 1789
+2020-04-01,2020-03-31T1700+0100, 2352
+2020-04-02,2020-04-01T1700+0100, 2921
+2020-04-03,2020-04-02T1700+0100, 3605
+2020-04-04,2020-04-03T1700+0100, 4313
+2020-04-05,2020-04-04T1700+0100, 4934
+2020-04-06,2020-04-05T1700+0100, 5373
+2020-04-07,2020-04-06T1700+0100, 6159
+2020-04-08,2020-04-07T1700+0100, 7097
+2020-04-09,2020-04-08T1700+0100, 7978
+2020-04-10,2020-04-09T1700+0100, 8958
+2020-04-11,2020-04-10T1700+0100, 9875
+2020-04-12,2020-04-11T1700+0100, 10612
+2020-04-13,2020-04-12T1700+0100, 11329
+2020-04-14,2020-04-13T1700+0100, 12107
+2020-04-15,2020-04-14T1700+0100, 12868
+2020-04-16,2020-04-15T1700+0100, 13729
+2020-04-17,2020-04-16T1700+0100, 14576
+2020-04-18,2020-04-17T1700+0100, 15464
+2020-04-19,2020-04-18T1700+0100, 16060
+2020-04-20,2020-04-19T1700+0100, 16509
+2020-04-21,2020-04-20T1700+0100, 17337
+2020-04-22,2020-04-21T1700+0100, 18100,")
+
+uk$date_uncorr <- update(lubridate::as_datetime(uk$date), hour = 9) 
+
+## Uncorrected data
+ggplot(data = uk, aes(time, deaths)) +
+    geom_point(aes(x = date_uncorr), shape = "circle open") + 
+    geom_gappath(aes(x = date_uncorr), size = 0.25) +
+    scale_x_datetime(minor_breaks = "1 day") + 
+    scale_y_log10()
+
+ggplot(data = uk, aes(time, deaths)) +
+    ## geom_point(aes(x = date_uncorr), colour = "lightblue") + 
+    geom_point(shape = "circle open") +
+    geom_gappath(size = 0.25) +
+    ## geom_vline(xintercept = lubridate::ymd_hm("2020-03-17T1700")) + ## office closed 
+    scale_x_datetime(minor_breaks = "1 day") +
+    theme(axis.title.x = element_blank()) +
+    theme(axis.title.y = element_blank()) +
+    ggtitle("Cumulative recorded deaths, UK, as reported by DHSC") +
+    scale_y_log10()
+```
+    
+I'd like to answer the following little question: what can we say about whether the trend in deaths
+has turned? 
+
+```{r}
+N <- nrow(uk)
+delta <- tibble(time = uk$time[-1],
+                r = log2(uk$deaths[-1] / uk$deaths[1:(N-1)]) /
+                    ((uk$time[-1] - uk$time[1:(N-1)]) / lubridate::ddays(1)))
+
+delta$tdbl <- log(2) / delta$r
+
+
+ggplot(data = delta, aes(time, r)) +
+    geom_point(shape = "circle open") +
+    geom_gappath(size = 0.25) +
+    ## geom_vline(xintercept = lubridate::ymd_hm("2020-03-17T1700")) + ## office closed 
+    scale_x_datetime(breaks = "1 week", minor_breaks = "1 day") +
+    theme(axis.title.x = element_blank()) +
+    ylab(expression(days^-1)) +
+    ylim(c(0.0, 0.8)) +
+    ggtitle("Growth rate, log (base 2) of cumulative deaths (UK, as reported by DHSC)")
+```
+
+
+    
